@@ -1,0 +1,138 @@
+#
+# build-openwrt-system-image.yml
+# Ophub原版，已内置【DNS+清华源修复】，解决 resolute 解析失败
+# 适用：S905L / MG101，打包ImmortalWrt / OpenWrt
+#
+name: Build OpenWrt System Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_release:
+        description: 'Select OpenWrt Release'
+        required: true
+        default: 'immortalwrt'
+        type: choice
+        options:
+          - immortalwrt
+          - openwrt
+      openwrt_version:
+        description: 'Select OS Release (推荐 noble, 不要用 resolute)'
+        required: true
+        default: 'noble'
+        type: choice
+        options:
+          - jammy
+          - noble
+          - bookworm
+      openwrt_board:
+        description: 'Select device board 【s905l-mg101】'
+        required: true
+        default: 's905l-mg101'
+        type: string
+      openwrt_kernel:
+        description: 'Kernel version, e.g. 5.15.100'
+        required: true
+        default: '5.15'
+        type: string
+      auto_kernel:
+        description: 'Auto use latest kernel'
+        required: true
+        default: true
+        type: boolean
+      kernel_repo:
+        description: 'Kernel repo'
+        required: true
+        default: 'ophub/kernel'
+        type: string
+      kernel_usage:
+        description: 'Kernel tag: stable / flippy / dev'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - flippy
+          - dev
+      openwrt_ip:
+        description: 'OpenWrt LAN IP'
+        required: true
+        default: '192.168.1.1'
+        type: string
+      builder_name:
+        description: 'Firmware signature'
+        required: false
+        default: 'ophub'
+        type: string
+      packages:
+        description: 'Add extra packages (space separated)'
+        required: false
+        default: ''
+        type: string
+      extra_conf:
+        description: 'Extra config file content'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      ##############################
+      # 【修复DNS + 替换清华源】重点
+      ##############################
+      - name: Set DNS & Replace Ubuntu mirror
+        run: |
+          sudo tee /etc/resolv.conf <<EOF
+nameserver 223.5.5.5
+nameserver 114.114.114.114
+EOF
+          sudo sed -i 's/azure.archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+          sudo sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+          sudo sed -i 's/security.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+          cat /etc/apt/sources.list
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses-dev libssl-dev bison flex git curl wget unzip gzip xz-utils python3 python3-pip
+
+      - name: Build OpenWrt rootfs
+        id: build_rootfs
+        uses: ophub/openwrt-build@main
+        with:
+          openwrt_release: ${{ inputs.openwrt_release }}
+          openwrt_version: ${{ inputs.openwrt_version }}
+          packages: ${{ inputs.packages }}
+          extra_conf: ${{ inputs.extra_conf }}
+
+      - name: Packaging OpenWrt firmware
+        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
+        uses: ophub/amlogic-s9xxx-openwrt@main
+        with:
+          openwrt_path: ${{ steps.build_rootfs.outputs.rootfs_path }}
+          openwrt_ip: ${{ inputs.openwrt_ip }}
+          openwrt_board: ${{ inputs.openwrt_board }}
+          openwrt_kernel: ${{ inputs.openwrt_kernel }}
+          auto_kernel: ${{ inputs.auto_kernel }}
+          kernel_repo: ${{ inputs.kernel_repo }}
+          kernel_usage: ${{ inputs.kernel_usage }}
+          builder_name: ${{ inputs.builder_name }}
+
+      - name: Upload firmware
+        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
+        uses: actions/upload-artifact@main
+        with:
+          name: openwrt-firmware
+          path: ./out/*.img.gz
+
+      - name: Release
+        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
+        uses: softprops/action-gh-release@master
+        with:
+          tag_name: OpenWrt-${{ github.run_number }}
+          files: ./out/*.img.gz
