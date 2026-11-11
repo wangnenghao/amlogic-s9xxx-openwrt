@@ -1,8 +1,6 @@
-#
 # build-openwrt-system-image.yml
 # Ophub原版，已内置【DNS+清华源修复】，解决 resolute 解析失败
 # 适用：S905L / MG101，打包ImmortalWrt / OpenWrt
-#
 name: Build OpenWrt System Image
 
 on:
