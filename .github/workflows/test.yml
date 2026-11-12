@@ -78,17 +78,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
-      ##############################
-      # 【修复DNS + 替换清华源】重点
-      ##############################
       - name: Set DNS & Replace Ubuntu mirror
         run: |
-          sudo tee /etc/resolv.conf <<EOF
-nameserver 223.5.5.5
-nameserver 114.114.114.114
-EOF
+          sudo tee /etc/resolv.conf <<'EOF'
+          nameserver 223.5.5.5
+          nameserver 114.114.114.114
+          EOF
           sudo sed -i 's/azure.archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
           sudo sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
           sudo sed -i 's/security.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
@@ -99,38 +96,32 @@ EOF
           sudo apt update
           sudo apt install -y build-essential libncurses-dev libssl-dev bison flex git curl wget unzip gzip xz-utils python3 python3-pip
 
-      - name: Build OpenWrt rootfs
-        id: build_rootfs
-        uses: ophub/openwrt-build@main
-        with:
-          openwrt_release: ${{ inputs.openwrt_release }}
-          openwrt_version: ${{ inputs.openwrt_version }}
-          packages: ${{ inputs.packages }}
-          extra_conf: ${{ inputs.extra_conf }}
-
-      - name: Packaging OpenWrt firmware
-        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
-        uses: ophub/amlogic-s9xxx-openwrt@main
-        with:
-          openwrt_path: ${{ steps.build_rootfs.outputs.rootfs_path }}
-          openwrt_ip: ${{ inputs.openwrt_ip }}
-          openwrt_board: ${{ inputs.openwrt_board }}
-          openwrt_kernel: ${{ inputs.openwrt_kernel }}
-          auto_kernel: ${{ inputs.auto_kernel }}
-          kernel_repo: ${{ inputs.kernel_repo }}
-          kernel_usage: ${{ inputs.kernel_usage }}
-          builder_name: ${{ inputs.builder_name }}
+      - name: Build firmware via local build.sh
+        run: |
+          AUTO_KERNEL="${{ inputs.auto_kernel }}"
+          if [ "$AUTO_KERNEL" = true ];then AUTO_KERNEL_PARAM="-a";else AUTO_KERNEL_PARAM="";fi
+          sudo ./build.sh \
+            -b ${{ inputs.openwrt_board }} \
+            -k ${{ inputs.openwrt_kernel }} \
+            -r ${{ inputs.openwrt_release }} \
+            -v ${{ inputs.openwrt_version }} \
+            -ip ${{ inputs.openwrt_ip }} \
+            $AUTO_KERNEL_PARAM \
+            -kp ${{ inputs.kernel_repo }} \
+            -ku ${{ inputs.kernel_usage }} \
+            -n ${{ inputs.builder_name }} \
+            -p "${{ inputs.packages }}" \
+            -c "${{ inputs.extra_conf }}"
 
       - name: Upload firmware
-        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: openwrt-firmware
           path: ./out/*.img.gz
 
       - name: Release
-        if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
-        uses: softprops/action-gh-release@master
+        uses: softprops/action-gh-release@v2
+        if: success()
         with:
           tag_name: OpenWrt-${{ github.run_number }}
           files: ./out/*.img.gz
