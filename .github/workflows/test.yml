@@ -1,5 +1,5 @@
 # build-openwrt-system-image.yml
-# Ophub原版，已内置【DNS+清华源修复】，解决 resolute 解析失败
+# Ophub amlogic-s9xxx-openwrt 适配 make.sh
 # 适用：S905L / MG101，打包ImmortalWrt / OpenWrt
 name: Build OpenWrt System Image
 
@@ -96,11 +96,12 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential libncurses-dev libssl-dev bison flex git curl wget unzip gzip xz-utils python3 python3-pip
 
-      - name: Build firmware via local build.sh
+      - name: Build firmware via local make.sh
         run: |
           AUTO_KERNEL="${{ inputs.auto_kernel }}"
           if [ "$AUTO_KERNEL" = true ];then AUTO_KERNEL_PARAM="-a";else AUTO_KERNEL_PARAM="";fi
-          sudo ./build.sh \
+          sudo chmod +x ./make.sh
+          sudo ./make.sh \
             -b ${{ inputs.openwrt_board }} \
             -k ${{ inputs.openwrt_kernel }} \
             -r ${{ inputs.openwrt_release }} \
