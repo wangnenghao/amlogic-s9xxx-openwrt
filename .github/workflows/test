@@ -1,8 +1,6 @@
-#
 # build-openwrt-system-image.yml
 # Ophub原版，已内置【DNS+清华源修复】，解决 resolute 解析失败
 # 适用：S905L / MG101，打包ImmortalWrt / OpenWrt
-#
 name: Build OpenWrt System Image
 
 on:
@@ -80,17 +78,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
-      ##############################
-      # 【修复DNS + 替换清华源】重点
-      ##############################
       - name: Set DNS & Replace Ubuntu mirror
         run: |
-          sudo tee /etc/resolv.conf <<EOF
-nameserver 223.5.5.5
-nameserver 114.114.114.114
-EOF
+          sudo tee /etc/resolv.conf <<'EOF'
+          nameserver 223.5.5.5
+          nameserver 114.114.114.114
+          EOF
           sudo sed -i 's/azure.archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
           sudo sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
           sudo sed -i 's/security.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
@@ -125,14 +120,14 @@ EOF
 
       - name: Upload firmware
         if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: openwrt-firmware
           path: ./out/*.img.gz
 
       - name: Release
         if: ${{ steps.build_rootfs.outputs.status == 'success' && !cancelled() }}
-        uses: softprops/action-gh-release@master
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: OpenWrt-${{ github.run_number }}
           files: ./out/*.img.gz
